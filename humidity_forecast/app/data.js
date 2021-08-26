@@ -1,43 +1,72 @@
-function submitPostcode(form) {
+function submitPostcode() {
+  postCode = getPostcodeForm()
+  postCode = formatPostcode(postCode)
+  document.getElementById("postcodeInput").value = postCode
+
+  getForecast(postCode, adjustPlot)
+}
+
+function getPostcodeForm() {
   var postCode = document.getElementById("postcodeInput").value;
-  getForecast(postCode)
-  // console.log(form)
-  // d3.json("https://raw.githubusercontent.com/stanton119/Humidity-Calculator/humidity_forecast/humidity_forecast/weather_data2.json", function (data) {
-  //   console.log(data)
-  //   traces = processData(data)
-  //   adjustPlot(traces)
-  // });
+  if (postCode == "") {
+    postCode = document.getElementById("postcodeInput").getAttribute("placeholder");
+  }
+  return postCode
 }
 
-function getForecast(postcode) {
-  // format postcode
-  url = "https://weather-broker-cdn.api.bbci.co.uk/en/forecast/aggregated/" + postcode
-  d3.json(url, function (data) {
-    console.log(data)
-    processedData = processBBCWeather(data)
-    console.log(processedData)
-    processedData = addInsideHumidity(processedData)
-    console.log(processedData)
-
-    traces = createTraces(processedData)
-    adjustPlot(traces)
-  });
+function formatPostcode(postCode) {
+  // limit to first part of the postcode
+  var spacePos = postCode.search(' ')
+  if (spacePos > -1) {
+    postCode = postCode.substring(0, spacePos)
+  }
+  return postCode
 }
 
-function processBBCWeather(data) {
-  return processForcasts(data['forecasts'])
+function getForecast(postcode, plottingFcn, source = 'bbc') {
+  if (source == 'bbc') {
+    return getBBCForecast(postcode, plottingFcn)
+  }
 }
 
-function processForcasts(forecasts) {
+function getBBCForecast(postcode, plottingFcn) {
+  var url = "https://weather-broker-cdn.api.bbci.co.uk/en/forecast/aggregated/" + postcode;
+
+  fetch(url)
+    .then(res => {
+      if (!res.ok) {
+        throw new Error('Network response was not ok');
+      }
+      return res.json();
+    })
+    .then(data => processForcast(data, standardiseBBCWeather, plottingFcn))
+    .catch(err => { throw err });
+
+  // d3.json(url, data => processForcast(data, standardiseBBCWeather, plottingFcn));
+}
+
+function processForcast(data, standardiseFcn, plottingFcn) {
+  standardisedData = standardiseFcn(data)
+  processedData = addInsideHumidity(standardisedData)
+
+  traces = createTraces(processedData)
+  plottingFcn(traces)
+}
+
+function standardiseBBCWeather(data) {
+  return processBBCForcasts(data['forecasts'])
+}
+
+function processBBCForcasts(forecasts) {
   var list = []
   for (var key in forecasts) {
-    result = processReports(forecasts[key]["detailed"]["reports"])
+    result = processBBCReports(forecasts[key]["detailed"]["reports"])
     list = list.concat(result)
   }
   return list
 }
 
-function processReports(reports) {
+function processBBCReports(reports) {
   reportOutput = []
   reports.forEach(function (report) {
     var date = new Date(report['localDate'])
@@ -46,10 +75,6 @@ function processReports(reports) {
     reportOutput.push({ date: date, outside_humidity: report['humidity'], outside_temp: report['temperatureC'] })
   })
   return reportOutput
-}
-
-function convertToTraces() {
-
 }
 
 function saturatePressure(temp) {
@@ -68,8 +93,8 @@ function getInsideHumidity(outside_temp, outside_humidity, inside_temp) {
 }
 
 function addInsideHumidity(data) {
-  data.forEach(function (element) {
-    element['inside_humidity'] = getInsideHumidity(element['outside_temp'], element['outside_humidity'], element['inside_temp'])
+  data.forEach(function (row) {
+    row['inside_humidity'] = getInsideHumidity(row['outside_temp'], row['outside_humidity'], row['inside_temp'])
   })
   return data
 }
@@ -79,7 +104,7 @@ function createTraces(data) {
 
   traceInHum = createTrace(dateList, listFromDicts(data, 'inside_humidity'), 'Inside humidity')
   traceOutHum = createTrace(dateList, listFromDicts(data, 'outside_humidity'), 'Outside humidity')
-  traceOutTemp = createTrace(dateList, listFromDicts(data, 'outside_temp'), 'Outside temperature')
+  traceOutTemp = createTrace(dateList, listFromDicts(data, 'outside_temp'), 'Outside temperature', 'legendonly')
 
   traces = [traceInHum, traceOutHum, traceOutTemp]
   return traces
@@ -93,58 +118,37 @@ function listFromDicts(data, key) {
   return list
 }
 
-function processData(data) {
-  dateInts = dictToList(data['date'])
-  dateObjs = convertToDate(dateInts)
-
-  traceInHum = createTrace(dateObjs, dictToList(data['inside_humidity']), 'Inside humidity')
-  traceOutHum = createTrace(dateObjs, dictToList(data['outside_humidity']), 'Outside humidity')
-  traceOutTemp = createTrace(dateObjs, dictToList(data['outside_temp']), 'Outside temperature')
-
-  traces = [traceInHum, traceOutHum, traceOutTemp]
-  return traces
-}
-
-function dictToList(dict) {
-  list = []
-  for (var key in dict) {
-    list.push(dict[key]);
-  }
-  return list
-}
-
-function convertToDate(dateInts) {
-  dateObjs = []
-  dateInts.forEach(function (dateInt) {
-    date = new Date(dateInt)
-    dateObjs.push(date)
-  })
-  return dateObjs
-}
-
-function createTrace(x, y, name) {
+function createTrace(x, y, name, visible = true) {
   var trace = {
     type: "scatter",
     mode: "lines",
     name: name,
     x: x,
     y: y,
+    visible: visible,
   }
   return trace
 }
 
 function createPlot(traces) {
+  var xrangemin = new Date;
+  var xrangemax = new Date(xrangemin.getTime()).setDate(xrangemin.getDate() + 3);
   var layout = {
     title: plotTitle,
+    height: 800,
+    xaxis: {
+      range: [xrangemin, xrangemax],
+      rangeslider: {}
+    },
   };
-
+  updatePlotData(traces)
   Plotly.newPlot(plotDiv, plotData, layout);
 }
 
 function updatePlotData(traces) {
   plotData.length = 0
-  traces.forEach(element => {
-    plotData.push(element)
+  traces.forEach(trace => {
+    plotData.push(trace)
   });
 }
 
@@ -153,12 +157,16 @@ function adjustPlot(traces) {
   Plotly.redraw(plotDiv);
 }
 
+// 
+var form = document.getElementById("postCodeForm");
+function handleForm(event) {
+  event.preventDefault();
+  submitPostcode();
+}
+form.addEventListener('submit', handleForm);
+
 const plotDiv = 'plotDiv'
-const plotTitle = 'Humidity Forecast'
+const plotTitle = ''
 var plotData = []
 
-d3.json("https://raw.githubusercontent.com/stanton119/Humidity-Calculator/humidity_forecast/humidity_forecast/weather_data.json", function (data) {
-  traces = processData(data)
-  updatePlotData(traces)
-  createPlot(traces)
-});
+getForecast('SW1A', createPlot)
