@@ -1,9 +1,9 @@
-function submitPostcode() {
-  postCode = getPostcodeForm()
+function submitPostcode(plottingFcn=adjustPlot) {
+  var postCode = getPostcodeForm()
   postCode = formatPostcode(postCode)
-  document.getElementById("postcodeInput").value = postCode
+  // document.getElementById("postcodeInput").value = postCode
 
-  getForecast(postCode, adjustPlot)
+  getForecast(postCode, plottingFcn)
 }
 
 function getPostcodeForm() {
@@ -41,15 +41,13 @@ function getBBCForecast(postcode, plottingFcn) {
     })
     .then(data => processForcast(data, standardiseBBCWeather, plottingFcn))
     .catch(err => { throw err });
-
-  // d3.json(url, data => processForcast(data, standardiseBBCWeather, plottingFcn));
 }
 
 function processForcast(data, standardiseFcn, plottingFcn) {
-  standardisedData = standardiseFcn(data)
-  processedData = addInsideHumidity(standardisedData)
+  var standardisedData = standardiseFcn(data)
+  var processedData = addInsideHumidity(standardisedData)
 
-  traces = createTraces(processedData)
+  var traces = createTraces(processedData)
   plottingFcn(traces)
 }
 
@@ -67,7 +65,7 @@ function processBBCForcasts(forecasts) {
 }
 
 function processBBCReports(reports) {
-  reportOutput = []
+  var reportOutput = []
   reports.forEach(function (report) {
     var date = new Date(report['localDate'])
     date.setHours(Number(report['timeslot'].substring(0, 2)))
@@ -82,8 +80,7 @@ function saturatePressure(temp) {
   return pressure
 }
 
-function getInsideHumidity(outside_temp, outside_humidity, inside_temp) {
-  inside_temp = 21
+function getInsideHumidity(outside_temp, outside_humidity) {
   return (
     (inside_temp + 273)
     * outside_humidity
@@ -100,13 +97,13 @@ function addInsideHumidity(data) {
 }
 
 function createTraces(data) {
-  dateList = listFromDicts(data, 'date')
+  var dateList = listFromDicts(data, 'date')
 
-  traceInHum = createTrace(dateList, listFromDicts(data, 'inside_humidity'), 'Inside humidity')
-  traceOutHum = createTrace(dateList, listFromDicts(data, 'outside_humidity'), 'Outside humidity')
-  traceOutTemp = createTrace(dateList, listFromDicts(data, 'outside_temp'), 'Outside temperature', 'legendonly')
+  var traceInHum = createTrace(dateList, listFromDicts(data, 'inside_humidity'), 'Inside humidity')
+  var traceOutHum = createTrace(dateList, listFromDicts(data, 'outside_humidity'), 'Outside humidity')
+  var traceOutTemp = createTrace(dateList, listFromDicts(data, 'outside_temp'), 'Outside temperature', 'legendonly')
 
-  traces = [traceInHum, traceOutHum, traceOutTemp]
+  var traces = [traceInHum, traceOutHum, traceOutTemp]
   return traces
 }
 
@@ -157,7 +154,30 @@ function adjustPlot(traces) {
   Plotly.redraw(plotDiv);
 }
 
-// 
+function findGetParameter(parameterName) {
+  // https://stackoverflow.com/questions/5448545/how-to-retrieve-get-parameters-from-javascript
+  var result = null,
+      tmp = [];
+  location.search
+      .substr(1)
+      .split("&")
+      .forEach(function (item) {
+        tmp = item.split("=");
+        if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
+      });
+  return result;
+}
+
+function defaultSetup() {
+  var postCode = findGetParameter('postcode')
+  if (postCode != null) {
+    postCode = formatPostcode(postCode)
+    document.getElementById("postcodeInput").value = postCode
+  }
+  submitPostcode(createPlot)
+}
+
+// page setup
 var form = document.getElementById("postCodeForm");
 function handleForm(event) {
   event.preventDefault();
@@ -168,5 +188,6 @@ form.addEventListener('submit', handleForm);
 const plotDiv = 'plotDiv'
 const plotTitle = ''
 var plotData = []
+const inside_temp = 21
 
-getForecast('SW1A', createPlot)
+defaultSetup()
