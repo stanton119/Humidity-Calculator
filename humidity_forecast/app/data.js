@@ -1,7 +1,8 @@
-function submitPostcode(plottingFcn=adjustPlot) {
+function submitPostcode(plottingFcn = adjustPlot) {
   var postCode = getPostcodeForm()
   postCode = formatPostcode(postCode)
   // document.getElementById("postcodeInput").value = postCode
+  updatePageURL(postCode)
 
   getForecast(postCode, plottingFcn)
 }
@@ -157,15 +158,23 @@ function adjustPlot(traces) {
 function findGetParameter(parameterName) {
   // https://stackoverflow.com/questions/5448545/how-to-retrieve-get-parameters-from-javascript
   var result = null,
-      tmp = [];
+    tmp = [];
   location.search
-      .substr(1)
-      .split("&")
-      .forEach(function (item) {
-        tmp = item.split("=");
-        if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
-      });
+    .substr(1)
+    .split("&")
+    .forEach(function (item) {
+      tmp = item.split("=");
+      if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
+    });
   return result;
+}
+
+function updatePageURL(postCode) {
+  var path = window.location.pathname;
+  var page = path.split("/").pop();
+
+  history.pushState({}, null, page + "?postcode=" + postCode)
+
 }
 
 function defaultSetup() {
@@ -177,12 +186,14 @@ function defaultSetup() {
   submitPostcode(createPlot)
 }
 
-// page setup
-var form = document.getElementById("postCodeForm");
 function handleForm(event) {
+  // prevents submit button refreshing page
   event.preventDefault();
   submitPostcode();
 }
+
+// page setup
+var form = document.getElementById("postCodeForm");
 form.addEventListener('submit', handleForm);
 
 const plotDiv = 'plotDiv'
