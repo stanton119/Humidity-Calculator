@@ -1,32 +1,104 @@
-function submitPostcode(plottingFcn = adjustPlot) {
-  var postCode = getPostcodeForm()
-  postCode = formatPostcode(postCode)
-  // document.getElementById("postcodeInput").value = postCode
-  updatePageURL(postCode)
-
-  getForecast(postCode, plottingFcn)
+function getURLParameter(parameterName) {
+  // https://stackoverflow.com/questions/5448545/how-to-retrieve-get-parameters-from-javascript
+  var result = null,
+      tmp = [];
+  location.search
+      .substr(1)
+      .split("&")
+      .forEach(function (item) {
+          tmp = item.split("=");
+          if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
+      });
+  return result;
 }
 
-function getPostcodeForm() {
-  var postCode = document.getElementById("postcodeInput").value;
-  if (postCode == "") {
-    postCode = document.getElementById("postcodeInput").getAttribute("placeholder");
+function setURLParameter(parameterName, value) {
+  // TODO allow multiple GET params
+  var path = window.location.pathname;
+  var page = path.split("/").pop();
+
+  history.pushState({}, null, page + "?" + parameterName + "=" + value)
+}
+
+class ForecastParams {
+  self = this;
+
+  constructor(postCode = 'SW7', indoorTemp = 21) {
+      this._postCode = this.formatPostcode(postCode);
+      this._indoorTemp = indoorTemp;
   }
-  return postCode
+
+  get postCode() {
+      return this._postCode;
+  }
+
+  set postCode(x) {
+      this._postCode = this.formatPostcode(x)
+  }
+
+  formatPostcode(x) {
+      var spacePos = x.search(' ')
+      if (spacePos > -1) {
+          x = x.substring(0, spacePos)
+      }
+      return x;
+  }
+
+  get indoorTemp() {
+      return this._indoorTemp;
+  }
+
+  set indoorTemp(x) {
+      var regex = /^-?[0-9]*\.?[0-9]*$/;
+
+      if (x.length > 0 && !regex.test(x)) {
+          return "";
+      }
+      this._indoorTemp = x
+  }
+
+  updateFromURL() {
+      var _postCode = getURLParameter('postCode')
+      if (_postCode != null) {
+          this.postCode = _postCode
+      }
+      var _indoorTemp = getURLParameter('indoorTemp')
+      if (_indoorTemp != null) {
+          this.indoorTemp = _indoorTemp
+      }
+  }
+
+  setForm() {
+      document.getElementById("postcodeInput").value = this.postCode
+      document.getElementById("indoorTempInput").value = this.indoorTemp
+  }
+
+  validateForm() {
+      this.postCode = document.getElementById("postcodeInput").value
+      this.indoorTemp = document.getElementById("indoorTempInput").value
+
+      setURLParameter('postCode', this.postCode)
+      setURLParameter('indoorTemp', this.indoorTemp)
+      this.setForm()
+  }
 }
 
-function formatPostcode(postCode) {
-  // limit to first part of the postcode
-  var spacePos = postCode.search(' ')
-  if (spacePos > -1) {
-    postCode = postCode.substring(0, spacePos)
+class HumidityData {
+  constructor(source = 'bbc') {
+      this.source = source;
   }
-  return postCode
+
+  getForecast(postcode) {
+      if (source == 'bbc') {
+          return getBBCForecast(postcode, plottingFcn)
+      }
+  }
 }
+
 
 function getForecast(postcode, plottingFcn, source = 'bbc') {
   if (source == 'bbc') {
-    return getBBCForecast(postcode, plottingFcn)
+      return getBBCForecast(postcode, plottingFcn)
   }
 }
 
@@ -45,17 +117,19 @@ function saturatePressure(temp) {
 }
 
 function getInsideHumidity(outside_temp, outside_humidity) {
+  var indoorTemperature = parseFloat(document.getElementById("indoorTempInput").value);
+
   return (
-    (inside_temp + 273)
-    * outside_humidity
-    * saturatePressure(outside_temp)
-    / ((outside_temp + 273) * saturatePressure(inside_temp))
+      (indoorTemperature + 273)
+      * outside_humidity
+      * saturatePressure(outside_temp)
+      / ((outside_temp + 273) * saturatePressure(indoorTemperature))
   )
 }
 
 function addInsideHumidity(data) {
   data.forEach(function (row) {
-    row['inside_humidity'] = getInsideHumidity(row['outside_temp'], row['outside_humidity'], row['inside_temp'])
+      row['inside_humidity'] = getInsideHumidity(row['outside_temp'], row['outside_humidity'], row['inside_temp'])
   })
   return data
 }
@@ -74,19 +148,19 @@ function createTraces(data) {
 function listFromDicts(data, key) {
   var list = []
   data.forEach(function (element) {
-    list.push(element[key])
+      list.push(element[key])
   })
   return list
 }
 
 function createTrace(x, y, name, visible = true) {
   var trace = {
-    type: "scatter",
-    mode: "lines",
-    name: name,
-    x: x,
-    y: y,
-    visible: visible,
+      type: "scatter",
+      mode: "lines",
+      name: name,
+      x: x,
+      y: y,
+      visible: visible,
   }
   return trace
 }
@@ -95,15 +169,15 @@ function createPlot(traces) {
   var xrangemin = new Date;
   var xrangemax = new Date(xrangemin.getTime()).setDate(xrangemin.getDate() + 3);
   var layout = {
-    title: plotTitle,
-    height: 800,
-    xaxis: {
-      range: [xrangemin, xrangemax],
-      rangeslider: {}
-    },
-    legend: {
-      x: 0
-    }
+      title: plotTitle,
+      height: 800,
+      xaxis: {
+          range: [xrangemin, xrangemax],
+          rangeslider: {}
+      },
+      legend: {
+          x: 0
+      }
   };
   updatePlotData(traces)
   Plotly.newPlot(plotDiv, plotData, layout);
@@ -112,7 +186,7 @@ function createPlot(traces) {
 function updatePlotData(traces) {
   plotData.length = 0
   traces.forEach(trace => {
-    plotData.push(trace)
+      plotData.push(trace)
   });
 }
 
@@ -121,50 +195,45 @@ function adjustPlot(traces) {
   Plotly.redraw(plotDiv);
 }
 
-function findGetParameter(parameterName) {
-  // https://stackoverflow.com/questions/5448545/how-to-retrieve-get-parameters-from-javascript
-  var result = null,
-    tmp = [];
-  location.search
-    .substr(1)
-    .split("&")
-    .forEach(function (item) {
-      tmp = item.split("=");
-      if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
-    });
-  return result;
+function submitPostcode(plottingFcn = adjustPlot) {
+  var postCode = forecastParams.postCode
+  getForecast(postCode, plottingFcn)
 }
 
-function updatePageURL(postCode) {
-  var path = window.location.pathname;
-  var page = path.split("/").pop();
-
-  history.pushState({}, null, page + "?postcode=" + postCode)
-
-}
 
 function defaultSetup() {
   var postCode = findGetParameter('postcode')
   if (postCode != null) {
-    postCode = formatPostcode(postCode)
-    document.getElementById("postcodeInput").value = postCode
+      postCode = formatPostcode(postCode)
+      document.getElementById("postcodeInput").value = postCode
   }
   submitPostcode(createPlot)
 }
 
+
 function handleForm(event) {
-  // prevents submit button refreshing page
-  event.preventDefault();
+  event.preventDefault(); // prevents submit button refreshing page
+  // forecastParams.validateForm();
   submitPostcode();
 }
 
-// page setup
+
+// setup params as singleton
+let forecastParams = new ForecastParams();
+forecastParams.updateFromURL()
+forecastParams.setForm()
+
+// setup form callbacks
 var form = document.getElementById("postCodeForm");
 form.addEventListener('submit', handleForm);
+form.addEventListener('input', function () {
+  forecastParams.validateForm()
+});
+
+
 
 const plotDiv = 'plotDiv'
 const plotTitle = ''
 var plotData = []
 const inside_temp = 21
-
-defaultSetup()
+submitPostcode(createPlot)
