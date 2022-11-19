@@ -290,5 +290,4 @@ form.addEventListener('input', function () {
 const plotDiv = 'plotDiv'
 const plotTitle = ''
 var plotData = []
-const inside_temp = 21
 submitPostcode(createPlot)
